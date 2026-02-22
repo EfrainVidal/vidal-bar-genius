@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/**
+ * Vidal Bar Genius — Monetization-optimized schema
+ *
+ * Adds:
+ * - AnalyticsEvent for conversion + funnel insights
+ */
+
+model User {
+  id         String   @id
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime?
+
+  // Entitlement
+  isPro      Boolean  @default(false)
+  proSince   DateTime?
+
+  // Relations
+  ingredients Ingredient[]
+  recipes     SavedRecipe[]
+  usage       UsageEvent[]
+  partyPlans  PartyPlan[]
+  analytics   AnalyticsEvent[]
+}
+
+model Ingredient {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  type      String
+
+  @@index([userId])
+}
+
+model SavedRecipe {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String
+  notes      String?
+  recipeJson String
+
+  @@index([userId])
+}
+
+model PartyPlan {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title      String
+  guestCount Int
+  vibe       String
+  planJson   String
+
+  @@index([userId])
+}
+
+model UsageEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  key       String
+  count     Int      @default(0)
+
+  @@unique([userId, key])
+}
+
+/**
+ * AnalyticsEvent:
+ * - Light funnel tracking
+ * - Stores optional JSON string meta for debugging
+ * - Keep it simple and cheap
+ */
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  event     String
+  metaJson  String?
+
+  @@index([userId])
+  @@index([event])
+  @@index([createdAt])
+}

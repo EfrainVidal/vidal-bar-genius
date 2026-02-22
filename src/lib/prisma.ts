@@ -1,15 +1,22 @@
 import { PrismaClient } from "@prisma/client";
 
 /**
- * Prisma singleton for Next.js dev hot reload safety.
- * Prevents "too many connections" locally.
+ * Fix:
+ * - DO NOT set engineType here
+ * - Let Prisma use default (binary)
+ * - Prevent multiple instances in dev
  */
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
 
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: ["error", "warn"]
+    log: ["error", "warn"], // optional logging
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}

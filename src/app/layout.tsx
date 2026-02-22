@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import AppHeader from "@/app/components/ui/AppHeader";
+import SessionBootstrap from "@/app/components/SessionBootstrap";
 
 /**
  * Root layout:
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <SessionBootstrap />
         <AppHeader />
         {children}
       </body>

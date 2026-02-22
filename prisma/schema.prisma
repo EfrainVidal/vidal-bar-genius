@@ -4,25 +4,19 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-/**
- * Vidal Bar Genius — Monetization-optimized schema
- *
- * Adds:
- * - AnalyticsEvent for conversion + funnel insights
- */
+// Vidal Bar Genius — canonical schema (matches the code)
 
 model User {
   id         String   @id
   createdAt  DateTime @default(now())
   lastSeenAt DateTime?
 
-  // Entitlement
   isPro      Boolean  @default(false)
   proSince   DateTime?
 
-  // Relations
   ingredients Ingredient[]
   recipes     SavedRecipe[]
   usage       UsageEvent[]
@@ -85,12 +79,6 @@ model UsageEvent {
   @@unique([userId, key])
 }
 
-/**
- * AnalyticsEvent:
- * - Light funnel tracking
- * - Stores optional JSON string meta for debugging
- * - Keep it simple and cheap
- */
 model AnalyticsEvent {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())

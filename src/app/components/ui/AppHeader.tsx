@@ -1,14 +1,36 @@
+"use client";
+
 import Link from "next/link";
-import { getIsPro, hasAnonSession } from "@/lib/access";
+import { useEffect, useState } from "react";
 
 /**
- * AppHeader:
- * - Adds /pricing route for conversion
- * - Keeps consistent Vidal UI
+ * AppHeader (Client)
+ * - Next 15 cookies() cannot be read sync in Server Components
+ * - So we fetch session/pro state from /api/me
  */
-export default async function AppHeader() {
-  const isPro = await getIsPro();
-  const hasSession = await hasAnonSession();
+
+type Me = {
+  hasSession: boolean;
+  isPro: boolean;
+  userId: string | null;
+};
+
+export default function AppHeader() {
+  const [me, setMe] = useState<Me>({ hasSession: false, isPro: false, userId: null });
+
+  async function load() {
+    try {
+      const res = await fetch("/api/me", { cache: "no-store" });
+      const data = (await res.json()) as Me;
+      setMe(data);
+    } catch {
+      // If this fails, keep defaults (free + no session)
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
 
   return (
     <div style={{ borderBottom: "1px solid rgba(233,236,242,0.10)" }}>
@@ -19,13 +41,13 @@ export default async function AppHeader() {
               🍸 Vidal Bar Genius
             </Link>
 
-            {!isPro ? (
+            {!me.isPro ? (
               <span className="pill pillPro">PRO • Unlock Party Mode</span>
             ) : (
               <span className="pill pillGood">PRO ACTIVE</span>
             )}
 
-            {hasSession ? <span className="pill">Session ✓</span> : <span className="pill">No session</span>}
+            {me.hasSession ? <span className="pill">Session ✓</span> : <span className="pill">No session</span>}
           </div>
 
           <div className="row">

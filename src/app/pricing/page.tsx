@@ -18,29 +18,35 @@ type SP = { [key: string]: string | string[] | undefined };
 export default async function PricingPage({
   searchParams,
 }: {
-  searchParams?: Promise<SP> | SP;
+  /**
+   * ✅ Next.js 15+ expects searchParams to be a Promise (or undefined).
+   * ❌ Do NOT use `Promise<SP> | SP` — that breaks PageProps typing in builds.
+   */
+  searchParams?: Promise<SP>;
 }) {
   const { userId, isPro } = await getAccess();
 
-  // ✅ Next 15.x: searchParams may be a Promise
-  const sp: SP | undefined =
-    searchParams && typeof (searchParams as any)?.then === "function"
-      ? await (searchParams as Promise<SP>)
-      : (searchParams as SP | undefined);
+  /**
+   * ✅ Next.js 15+:
+   * `searchParams` is async, so we await it.
+   * If it's undefined (possible during certain render modes), we handle it.
+   */
+  const sp: SP | undefined = searchParams ? await searchParams : undefined;
 
+  // Query param flags
   const success = sp?.success === "1";
   const canceled = sp?.canceled === "1";
   const loggedIn = sp?.logged_in === "1";
 
-  const loginError =
-    typeof sp?.login_error === "string" ? sp.login_error : null;
+  const loginError = typeof sp?.login_error === "string" ? sp.login_error : null;
 
   return (
     <main className="container">
       <header style={{ marginBottom: 14 }}>
         <h1 className="pageTitle">Pricing 💳</h1>
         <p className="subtle" style={{ marginTop: 6 }}>
-          Free stays useful forever. PRO unlocks the hosting features that make parties effortless.
+          Free stays useful forever. PRO unlocks the hosting features that make
+          parties effortless.
         </p>
 
         {/* Trust / risk reducers */}
@@ -62,7 +68,9 @@ export default async function PricingPage({
               </form>
             </>
           ) : (
-            <span className="pill pillWarn">Not logged in • Login required to buy PRO</span>
+            <span className="pill pillWarn">
+              Not logged in • Login required to buy PRO
+            </span>
           )}
         </div>
       </header>
@@ -72,7 +80,8 @@ export default async function PricingPage({
         <div className="panel">
           <div style={{ fontWeight: 900 }}>✅ Payment complete</div>
           <div className="mini" style={{ marginTop: 6 }}>
-            If you don’t see PRO immediately, refresh once. (Webhooks can take a moment.)
+            If you don’t see PRO immediately, refresh once. (Webhooks can take a
+            moment.)
           </div>
         </div>
       ) : null}
@@ -121,7 +130,8 @@ export default async function PricingPage({
             You’re PRO ✅
           </h2>
           <p className="subtle">
-            Party Mode is fully unlocked. Build a menu and get an exact shopping list in seconds.
+            Party Mode is fully unlocked. Build a menu and get an exact shopping
+            list in seconds.
           </p>
 
           <div style={{ marginTop: 12 }} className="row">
@@ -141,7 +151,8 @@ export default async function PricingPage({
                 Unlock PRO Lifetime
               </div>
               <p className="subtle" style={{ marginTop: 0 }}>
-                Built for hosting: menu + exact shopping list based on your real bar.
+                Built for hosting: menu + exact shopping list based on your real
+                bar.
               </p>
             </div>
             <span className="pill pillPro">BEST VALUE</span>
@@ -161,7 +172,9 @@ export default async function PricingPage({
           <div className="kv">
             <span className="pill">PRO Monthly (coming soon) • $9/mo</span>
             <span className="pill pillGood">Lifetime • one-time</span>
-            <span className="pill">Lifetime = lifetime access to PRO features in this app</span>
+            <span className="pill">
+              Lifetime = lifetime access to PRO features in this app
+            </span>
           </div>
 
           <div style={{ marginTop: 12 }}>
@@ -198,7 +211,9 @@ export default async function PricingPage({
       {/* Comparison grid */}
       <div className="grid2">
         <div className="panel">
-          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>FREE</div>
+          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>
+            FREE
+          </div>
           <p className="subtle" style={{ marginTop: 0 }}>
             Great for casual nights — enough to keep forever.
           </p>
@@ -215,13 +230,17 @@ export default async function PricingPage({
 
           <div className="hr" />
 
-          <p className="mini">Free helps you discover what you can make. PRO makes you “host-ready”.</p>
+          <p className="mini">
+            Free helps you discover what you can make. PRO makes you “host-ready”.
+          </p>
         </div>
 
         <div className="panel">
           <div className="row rowSpace">
             <div>
-              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>PRO</div>
+              <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6 }}>
+                PRO
+              </div>
               <p className="subtle" style={{ marginTop: 0 }}>
                 For parties, hosting, and “tell me exactly what to buy”.
               </p>
@@ -258,7 +277,9 @@ export default async function PricingPage({
 
       {/* FAQ */}
       <div className="panel">
-        <h2 className="pageTitle" style={{ marginBottom: 6 }}>FAQ</h2>
+        <h2 className="pageTitle" style={{ marginBottom: 6 }}>
+          FAQ
+        </h2>
         <div className="hr" />
 
         <div style={{ display: "grid", gap: 12 }}>

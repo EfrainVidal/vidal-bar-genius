@@ -6,11 +6,13 @@ import SessionBootstrap from "@/app/components/SessionBootstrap";
 /**
  * Root layout:
  * - global CSS
- * - AppHeader for navigation and PRO upsell
+ * - SessionBootstrap for session init (if you use it elsewhere)
+ * - AppHeader for navigation + PRO upsell + session state
  */
 export const metadata: Metadata = {
   title: "Vidal Bar Genius — Smart Bar System",
-  description: "Turn your home bar into a smart cocktail engine."
+  description: "Track your bar, match drinks instantly, and generate party menus + shopping lists.",
+  metadataBase: process.env.APP_URL ? new URL(process.env.APP_URL) : undefined,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

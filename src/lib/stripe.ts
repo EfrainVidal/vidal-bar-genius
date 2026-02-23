@@ -6,6 +6,7 @@ import { assertEnv } from "@/lib/env.server";
 
 /**
  * Server-only Stripe helper.
+ *
  * Only import this from:
  * - Route Handlers (src/app/api/**)
  * - Server Components

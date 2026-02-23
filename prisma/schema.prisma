@@ -4,25 +4,60 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-// Vidal Bar Genius — canonical schema (matches the code)
+// =========================
+// USER (core identity)
+// =========================
 
 model User {
   id         String   @id
   createdAt  DateTime @default(now())
   lastSeenAt DateTime?
 
+  // Email-based identity (used as login + userId)
+  email      String?  @unique
+
   isPro      Boolean  @default(false)
   proSince   DateTime?
+
+  // Stripe linkage (prevents double pay + helps support)
+  stripeCustomerId      String? @unique
+  stripePaymentIntentId String? @unique
 
   ingredients Ingredient[]
   recipes     SavedRecipe[]
   usage       UsageEvent[]
   partyPlans  PartyPlan[]
   analytics   AnalyticsEvent[]
+
+  @@index([isPro])
 }
+
+// =========================
+// EMAIL LOGIN TOKENS
+// =========================
+
+model LoginToken {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  email     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  ip        String?
+  ua        String?
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+// =========================
+// USER DATA
+// =========================
 
 model Ingredient {
   id        String   @id @default(cuid())
@@ -92,4 +127,20 @@ model AnalyticsEvent {
   @@index([userId])
   @@index([event])
   @@index([createdAt])
+}
+
+// =========================
+// STRIPE WEBHOOK DEDUPE
+// =========================
+
+model StripeEvent {
+  id          String    @id
+  type        String
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  error       String?
+
+  @@index([receivedAt])
+  @@index([processedAt])
+  @@index([type])
 }

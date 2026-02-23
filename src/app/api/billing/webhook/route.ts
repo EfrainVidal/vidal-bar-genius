@@ -1,18 +1,11 @@
+// src/app/api/billing/webhook/route.ts
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
+import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { assertEnv } from "@/lib/env.server";
 
-/**
- * POST /api/billing/webhook
- * Stripe webhook handler.
- *
- * IMPORTANT:
- * - Must read RAW body via req.text()
- * - Verify signature using STRIPE_WEBHOOK_SECRET
- * - Must validate price ID for safety (optional but recommended)
- */
 export async function POST(req: Request) {
   const stripe = getStripe();
 
@@ -22,44 +15,104 @@ export async function POST(req: Request) {
   const body = await req.text();
   const whSecret = assertEnv("STRIPE_WEBHOOK_SECRET");
 
-  let event;
+  let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, whSecret);
+    event = stripe.webhooks.constructEvent(body, sig, whSecret) as Stripe.Event;
   } catch (err) {
     console.error("Webhook signature verification failed:", err);
     return NextResponse.json({ error: "Bad signature" }, { status: 400 });
   }
 
+  // --- Dedupe (retry-safe) ---
+  const existing = await prisma.stripeEvent.findUnique({ where: { id: event.id } });
+
+  if (existing?.processedAt) {
+    return NextResponse.json({ received: true, deduped: true });
+  }
+
+  if (!existing) {
+    try {
+      await prisma.stripeEvent.create({
+        data: { id: event.id, type: event.type },
+      });
+    } catch {
+      // If a concurrent request created it, continue
+      const again = await prisma.stripeEvent.findUnique({ where: { id: event.id } });
+      if (again?.processedAt) return NextResponse.json({ received: true, deduped: true });
+    }
+  }
+
   try {
-    // One-time payments complete here:
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as any;
+    // Treat async success the same as completed (harmless if you never use async methods)
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded"
+    ) {
+      const session = event.data.object as Stripe.Checkout.Session;
 
-      const userId = session?.metadata?.userId as string | undefined;
-      if (!userId) throw new Error("Missing userId in metadata");
+      const userId = session?.metadata?.userId;
+      if (!userId) throw new Error("Missing userId in session.metadata");
 
-      // Optional: validate the price id on the session line items
-      // This prevents someone from paying for a cheaper product and getting PRO.
       const expectedPriceId = assertEnv("STRIPE_PRICE_ID_PRO");
 
-      // Fetch line items to confirm price
-      const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 10 });
+      // Validate purchased price
+      const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 20 });
       const ok = lineItems.data.some((li) => li.price?.id === expectedPriceId);
-
       if (!ok) throw new Error("Price mismatch (not PRO price)");
 
-      // Grant PRO
-      await prisma.user.update({
+      const source = (session?.metadata?.source || "unknown").slice(0, 64);
+
+      const stripeCustomerId = typeof session.customer === "string" ? session.customer : null;
+      const paymentIntentId =
+        typeof session.payment_intent === "string" ? session.payment_intent : null;
+
+      // Grant PRO + store Stripe ids (upsert so it never fails)
+      await prisma.user.upsert({
         where: { id: userId },
-        data: { isPro: true, proSince: new Date() }
+        update: {
+          isPro: true,
+          lastSeenAt: new Date(),
+          stripeCustomerId: stripeCustomerId ?? undefined,
+          stripePaymentIntentId: paymentIntentId ?? undefined,
+        },
+        create: {
+          id: userId,
+          isPro: true,
+          proSince: new Date(),
+          lastSeenAt: new Date(),
+          stripeCustomerId: stripeCustomerId ?? undefined,
+          stripePaymentIntentId: paymentIntentId ?? undefined,
+        },
       });
 
-      console.log("Granted PRO to user:", userId);
+      // Preserve original proSince if it already exists
+      await prisma.user.updateMany({
+        where: { id: userId, proSince: null },
+        data: { proSince: new Date() },
+      });
+
+      console.log("Granted PRO:", userId, "source:", source);
     }
 
+    // Mark processed (use updateMany so we never throw if row is missing)
+    await prisma.stripeEvent.updateMany({
+      where: { id: event.id },
+      data: { processedAt: new Date(), error: null },
+    });
+
     return NextResponse.json({ received: true });
-  } catch (e) {
-    console.error("Webhook handling error:", e);
-    return NextResponse.json({ error: "Webhook error" }, { status: 500 });
+  } catch (e: any) {
+    console.error("Webhook handling error:", e?.message || e);
+
+    // Store error but DO NOT mark processed — Stripe will retry and we’ll try again
+    await prisma.stripeEvent.updateMany({
+      where: { id: event.id },
+      data: { error: String(e?.message || "Unknown error") },
+    });
+
+    return NextResponse.json(
+      { error: "Webhook error", detail: e?.message || "Unknown" },
+      { status: 500 }
+    );
   }
 }

@@ -3,40 +3,43 @@
 import { useEffect, useState } from "react";
 
 /**
- * BarClient:
- * - Add/remove ingredients
- * - Starter Bar Pack (activation booster)
+ * Props definition (IMPORTANT)
+ * This fixes your TypeScript error about userId not existing
  */
+type BarClientProps = {
+  isPro: boolean;
+  userId?: string | null;
+};
 
-// ✅ Safe response reader: never crashes on empty or non-JSON bodies
+/**
+ * Safe response reader:
+ * Prevents crashes like "Unexpected end of JSON input"
+ */
 async function readJsonOrText(res: Response) {
   const contentType = res.headers.get("content-type") || "";
-  const text = await res.text(); // read once
+  const text = await res.text();
 
-  // Empty body (common on 204/405/edge failures)
   if (!text) return { json: null as any, text: "" };
 
-  // If server sent JSON, parse it
   if (contentType.includes("application/json")) {
     try {
       return { json: JSON.parse(text), text };
     } catch {
-      // JSON header but invalid JSON
       return { json: null as any, text };
     }
   }
 
-  // Not JSON (could be HTML error page, redirect page, etc.)
   return { json: null as any, text };
 }
 
-// ✅ Helper: throws a useful error message on failure
+/**
+ * Throws readable errors instead of crashing
+ */
 async function assertOk(res: Response) {
   if (res.ok) return;
 
   const { json, text } = await readJsonOrText(res);
 
-  // Prefer JSON error if present
   const msg =
     (json && typeof json === "object" && (json.error || json.message) && String(json.error || json.message)) ||
     (text ? text.slice(0, 200) : "") ||
@@ -45,23 +48,39 @@ async function assertOk(res: Response) {
   throw new Error(msg);
 }
 
-export default function BarClient({ isPro }: { isPro: boolean }) {
+/**
+ * Main component
+ */
+export default function BarClient({ isPro, userId }: BarClientProps) {
   const [items, setItems] = useState<any[]>([]);
   const [name, setName] = useState("");
   const [type, setType] = useState("spirit");
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Load ingredients
+   */
   async function load() {
-    const res = await fetch("/api/bar", { method: "GET" });
+    const res = await fetch("/api/bar");
     await assertOk(res);
 
     const { json } = await readJsonOrText(res);
     setItems(json?.ingredients || []);
   }
 
+  /**
+   * Add ingredient
+   */
   async function add() {
     try {
       setLoading(true);
+
+      // ❌ Prevent adding if not logged in
+      if (!userId) {
+        alert("Please log in first.");
+        window.location.href = "/pricing#login";
+        return;
+      }
 
       const res = await fetch("/api/bar", {
         method: "POST",
@@ -71,7 +90,6 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
 
       await assertOk(res);
 
-      // We don't even need the JSON body here; just refresh list
       setName("");
       await load();
     } catch (e: any) {
@@ -81,9 +99,19 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
     }
   }
 
+  /**
+   * Add starter pack
+   */
   async function addStarterPack() {
     try {
       setLoading(true);
+
+      // ❌ Prevent unauthorized call (fixes your current error)
+      if (!userId) {
+        alert("Please log in first.");
+        window.location.href = "/pricing#login";
+        return;
+      }
 
       const res = await fetch("/api/bar/starter", { method: "POST" });
       await assertOk(res);
@@ -100,6 +128,9 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
     }
   }
 
+  /**
+   * Remove ingredient
+   */
   async function remove(id: string) {
     const ok = confirm("Delete this ingredient?");
     if (!ok) return;
@@ -118,6 +149,9 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
     }
   }
 
+  /**
+   * Load on mount
+   */
   useEffect(() => {
     load().catch(() => {});
   }, []);
@@ -156,26 +190,42 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
           <button
             className="v-btn v-btnPrimary"
             onClick={add}
-            disabled={loading || name.trim().length < 2}
+            disabled={loading || name.trim().length < 2 || !userId}
           >
             {loading ? "Adding…" : "Add"}
           </button>
 
-          <span className={`pill ${isPro ? "pillGood" : ""}`}>{isPro ? "PRO" : "FREE"}</span>
+          <span className={`pill ${isPro ? "pillGood" : ""}`}>
+            {isPro ? "PRO" : "FREE"}
+          </span>
         </div>
 
         <div className="row">
-          <button className="v-btn" onClick={addStarterPack} disabled={loading}>
+          <button
+            className="v-btn"
+            onClick={addStarterPack}
+            disabled={loading || !userId} // ✅ disable if not logged in
+            title={!userId ? "Login required" : undefined}
+          >
             ⚡ Add Starter Bar Pack
           </button>
-          <span className="mini">Best for new users: instant matches → instant retention.</span>
+
+          {!userId ? (
+            <span className="mini">Login required to save your bar.</span>
+          ) : (
+            <span className="mini">
+              Best for new users: instant matches → instant retention.
+            </span>
+          )}
         </div>
       </div>
 
       <div className="hr" />
 
       <div className="panel">
-        <div style={{ fontWeight: 800, marginBottom: 10 }}>Your Ingredients ({items.length})</div>
+        <div style={{ fontWeight: 800, marginBottom: 10 }}>
+          Your Ingredients ({items.length})
+        </div>
 
         <div className="kv">
           {items.map((it) => (
@@ -185,14 +235,17 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
               style={{ cursor: "pointer" }}
               onClick={() => remove(it.id)}
             >
-              {it.name} <span style={{ opacity: 0.7 }}>• {it.type} • delete</span>
+              {it.name}{" "}
+              <span style={{ opacity: 0.7 }}>
+                • {it.type} • delete
+              </span>
             </span>
           ))}
         </div>
 
         {items.length === 0 ? (
           <p className="mini" style={{ marginTop: 10 }}>
-            Click <b>Add Starter Bar Pack</b>. You’ll get instant matches and you’ll understand the product in 10 seconds.
+            Click <b>Add Starter Bar Pack</b>. You’ll get instant matches and understand the product in 10 seconds.
           </p>
         ) : null}
       </div>

@@ -1,3 +1,5 @@
+// src/app/api/recipes/route.ts
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAccess } from "@/lib/access";
@@ -9,20 +11,32 @@ import { FREE_LIMITS } from "@/lib/limits";
  * Returns saved recipes.
  */
 export async function GET() {
-  const { userId } = await getAccess();
+  try {
+    const access = await getAccess();
 
-  const recipes = await prisma.savedRecipe.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" }
-  });
+    // ✅ Guarantee userId is a real string (fixes Prisma/TS null errors)
+    if (!access || typeof access.userId !== "string" || access.userId.length === 0) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  return NextResponse.json({ recipes });
+    const userId: string = access.userId;
+
+    const recipes = await prisma.savedRecipe.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({ recipes });
+  } catch (err) {
+    console.error("GET /api/recipes error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
 }
 
 const SaveSchema = z.object({
   name: z.string().min(2).max(80),
   recipeJson: z.string().min(2),
-  notes: z.string().max(400).optional()
+  notes: z.string().max(400).optional(),
 });
 
 /**
@@ -30,34 +44,48 @@ const SaveSchema = z.object({
  * Saves a recipe (free tier has a slot limit).
  */
 export async function POST(req: Request) {
-  const { userId, isPro } = await getAccess();
-  const body = await req.json().catch(() => null);
-  const parsed = SaveSchema.safeParse(body);
+  try {
+    const access = await getAccess();
 
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid recipe" }, { status: 400 });
-  }
-
-  if (!isPro) {
-    const count = await prisma.savedRecipe.count({ where: { userId } });
-    if (count >= FREE_LIMITS.saveSlots) {
-      return NextResponse.json(
-        { error: "SAVE_LIMIT", message: "Free save slots full. Upgrade to PRO for a bigger vault." },
-        { status: 402 }
-      );
+    // ✅ Guarantee userId is a real string
+    if (!access || typeof access.userId !== "string" || access.userId.length === 0) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-  }
 
-  const recipe = await prisma.savedRecipe.create({
-    data: {
-      userId,
-      name: parsed.data.name,
-      notes: parsed.data.notes,
-      recipeJson: parsed.data.recipeJson
+    const userId: string = access.userId;
+    const isPro: boolean = !!access.isPro;
+
+    const body = await req.json().catch(() => null);
+    const parsed = SaveSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid recipe" }, { status: 400 });
     }
-  });
 
-  return NextResponse.json({ recipe });
+    if (!isPro) {
+      const count = await prisma.savedRecipe.count({ where: { userId } });
+      if (count >= FREE_LIMITS.saveSlots) {
+        return NextResponse.json(
+          { error: "SAVE_LIMIT", message: "Free save slots full. Upgrade to PRO for a bigger vault." },
+          { status: 402 }
+        );
+      }
+    }
+
+    const recipe = await prisma.savedRecipe.create({
+      data: {
+        userId,
+        name: parsed.data.name,
+        notes: parsed.data.notes,
+        recipeJson: parsed.data.recipeJson,
+      },
+    });
+
+    return NextResponse.json({ recipe });
+  } catch (err) {
+    console.error("POST /api/recipes error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
 }
 
 const DeleteSchema = z.object({ id: z.string().min(1) });
@@ -67,17 +95,30 @@ const DeleteSchema = z.object({ id: z.string().min(1) });
  * Deletes a saved recipe.
  */
 export async function DELETE(req: Request) {
-  const { userId } = await getAccess();
-  const body = await req.json().catch(() => null);
-  const parsed = DeleteSchema.safeParse(body);
+  try {
+    const access = await getAccess();
 
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    // ✅ Guarantee userId is a real string
+    if (!access || typeof access.userId !== "string" || access.userId.length === 0) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId: string = access.userId;
+
+    const body = await req.json().catch(() => null);
+    const parsed = DeleteSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    }
+
+    await prisma.savedRecipe.deleteMany({
+      where: { id: parsed.data.id, userId },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/recipes error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
-
-  await prisma.savedRecipe.deleteMany({
-    where: { id: parsed.data.id, userId }
-  });
-
-  return NextResponse.json({ ok: true });
 }

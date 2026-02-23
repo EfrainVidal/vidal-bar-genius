@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
  * POST /api/analytics
  * Minimal event collection.
  *
- * IMPORTANT:
- * - In our Prisma schema, AnalyticsEvent.userId is REQUIRED.
- * - So we must reject anonymous events (no x-user-id header).
+ * REQUIREMENTS:
+ * - Must include "x-user-id" header
+ * - Reject anonymous requests
  */
 
 const Schema = z.object({
@@ -17,27 +17,50 @@ const Schema = z.object({
 });
 
 export async function POST(req: Request) {
-  // Headers.get() returns string | null
-  const userId = req.headers.get("x-user-id");
+  try {
+    // Headers.get() returns string | null
+    const userIdHeader = req.headers.get("x-user-id");
 
-  if (!userId) {
-    return NextResponse.json({ error: "Missing x-user-id" }, { status: 401 });
+    // Reject if missing
+    if (!userIdHeader) {
+      return NextResponse.json(
+        { error: "Missing x-user-id" },
+        { status: 401 }
+      );
+    }
+
+    // Now guaranteed string (fixes TS error)
+    const userId: string = userIdHeader;
+
+    // Parse body safely
+    const body = await req.json().catch(() => null);
+    const parsed = Schema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid event" },
+        { status: 400 }
+      );
+    }
+
+    // Save event
+    await prisma.analyticsEvent.create({
+      data: {
+        userId,
+        event: parsed.data.event,
+        metaJson: parsed.data.meta
+          ? JSON.stringify(parsed.data.meta)
+          : undefined,
+      },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Analytics POST error:", err);
+
+    return NextResponse.json(
+      { error: "Server error" },
+      { status: 500 }
+    );
   }
-
-  const body = await req.json().catch(() => null);
-  const parsed = Schema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid event" }, { status: 400 });
-  }
-
-  await prisma.analyticsEvent.create({
-    data: {
-      userId, // REQUIRED by schema
-      event: parsed.data.event,
-      metaJson: parsed.data.meta ? JSON.stringify(parsed.data.meta) : undefined,
-    },
-  });
-
-  return NextResponse.json({ ok: true });
 }

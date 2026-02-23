@@ -1,3 +1,5 @@
+// src/app/pricing/page
+
 import Link from "next/link";
 import { getAccess } from "@/lib/access.server";
 import PaywallCard from "@/app/components/PaywallCard";

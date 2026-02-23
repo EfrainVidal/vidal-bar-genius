@@ -7,6 +7,44 @@ import { useEffect, useState } from "react";
  * - Add/remove ingredients
  * - Starter Bar Pack (activation booster)
  */
+
+// ✅ Safe response reader: never crashes on empty or non-JSON bodies
+async function readJsonOrText(res: Response) {
+  const contentType = res.headers.get("content-type") || "";
+  const text = await res.text(); // read once
+
+  // Empty body (common on 204/405/edge failures)
+  if (!text) return { json: null as any, text: "" };
+
+  // If server sent JSON, parse it
+  if (contentType.includes("application/json")) {
+    try {
+      return { json: JSON.parse(text), text };
+    } catch {
+      // JSON header but invalid JSON
+      return { json: null as any, text };
+    }
+  }
+
+  // Not JSON (could be HTML error page, redirect page, etc.)
+  return { json: null as any, text };
+}
+
+// ✅ Helper: throws a useful error message on failure
+async function assertOk(res: Response) {
+  if (res.ok) return;
+
+  const { json, text } = await readJsonOrText(res);
+
+  // Prefer JSON error if present
+  const msg =
+    (json && typeof json === "object" && (json.error || json.message) && String(json.error || json.message)) ||
+    (text ? text.slice(0, 200) : "") ||
+    `Request failed (${res.status})`;
+
+  throw new Error(msg);
+}
+
 export default function BarClient({ isPro }: { isPro: boolean }) {
   const [items, setItems] = useState<any[]>([]);
   const [name, setName] = useState("");
@@ -14,26 +52,30 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
   const [loading, setLoading] = useState(false);
 
   async function load() {
-    const res = await fetch("/api/bar");
-    const data = await res.json();
-    setItems(data.ingredients || []);
+    const res = await fetch("/api/bar", { method: "GET" });
+    await assertOk(res);
+
+    const { json } = await readJsonOrText(res);
+    setItems(json?.ingredients || []);
   }
 
   async function add() {
     try {
       setLoading(true);
+
       const res = await fetch("/api/bar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, type })
+        body: JSON.stringify({ name, type }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Add failed");
 
+      await assertOk(res);
+
+      // We don't even need the JSON body here; just refresh list
       setName("");
       await load();
     } catch (e: any) {
-      alert(e.message || "Error");
+      alert(e?.message || "Error");
     } finally {
       setLoading(false);
     }
@@ -42,13 +84,17 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
   async function addStarterPack() {
     try {
       setLoading(true);
+
       const res = await fetch("/api/bar/starter", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Starter pack failed");
-      alert(`Starter pack added: ${data.added} items ✅`);
+      await assertOk(res);
+
+      const { json } = await readJsonOrText(res);
+      const added = typeof json?.added === "number" ? json.added : 0;
+
+      alert(`Starter pack added: ${added} items ✅`);
       await load();
     } catch (e: any) {
-      alert(e.message || "Error");
+      alert(e?.message || "Error");
     } finally {
       setLoading(false);
     }
@@ -58,13 +104,18 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
     const ok = confirm("Delete this ingredient?");
     if (!ok) return;
 
-    await fetch("/api/bar", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id })
-    });
+    try {
+      const res = await fetch("/api/bar", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
 
-    await load();
+      await assertOk(res);
+      await load();
+    } catch (e: any) {
+      alert(e?.message || "Error");
+    }
   }
 
   useEffect(() => {
@@ -89,7 +140,12 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
             onChange={(e) => setName(e.target.value)}
           />
 
-          <select className="select" value={type} onChange={(e) => setType(e.target.value)} style={{ width: 180 }}>
+          <select
+            className="select"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            style={{ width: 180 }}
+          >
             <option value="spirit">spirit</option>
             <option value="mixer">mixer</option>
             <option value="garnish">garnish</option>
@@ -97,7 +153,11 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
             <option value="other">other</option>
           </select>
 
-          <button className="v-btn v-btnPrimary" onClick={add} disabled={loading || name.trim().length < 2}>
+          <button
+            className="v-btn v-btnPrimary"
+            onClick={add}
+            disabled={loading || name.trim().length < 2}
+          >
             {loading ? "Adding…" : "Add"}
           </button>
 
@@ -119,7 +179,12 @@ export default function BarClient({ isPro }: { isPro: boolean }) {
 
         <div className="kv">
           {items.map((it) => (
-            <span key={it.id} className="pill" style={{ cursor: "pointer" }} onClick={() => remove(it.id)}>
+            <span
+              key={it.id}
+              className="pill"
+              style={{ cursor: "pointer" }}
+              onClick={() => remove(it.id)}
+            >
               {it.name} <span style={{ opacity: 0.7 }}>• {it.type} • delete</span>
             </span>
           ))}

@@ -1,4 +1,4 @@
-import { getAccess } from "@/lib/access";
+import { getAccess } from "@/lib/access.server";
 import MakeClient from "./MakeClient";
 
 /**

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAccess } from "@/lib/access";
+import { getAccess } from "@/lib/access.server";
 import { getStripe } from "@/lib/stripe";
 import { assertEnv } from "@/lib/utils";
 

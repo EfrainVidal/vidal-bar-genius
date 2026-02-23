@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAccess } from "@/lib/access";
+import { getAccess } from "@/lib/access.server";
 import { prisma } from "@/lib/prisma";
 import { FREE_LIMITS } from "@/lib/limits";
 

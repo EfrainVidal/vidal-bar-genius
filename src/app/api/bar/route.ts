@@ -4,25 +4,24 @@ import { getAccess } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Helper: Fetches the userId. 
- * Returns the string if found, or null if unauthorized.
+ * Helper: get a non-null userId.
+ * Returns the string ID if authenticated, or null if not.
  */
-async function getAuthenticatedUserId(): Promise<string | null> {
+async function getAuthId(): Promise<string | null> {
   const access = await getAccess();
-  // Ensure we return a real string or a clear null
   return access?.userId || null;
 }
 
 export async function GET() {
-  const userId = await getAuthenticatedUserId();
+  const userId = await getAuthId();
 
+  // This check "narrows" userId from string | null to just string
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const ingredients = await prisma.ingredient.findMany({
-    // TypeScript now knows userId is strictly a string here
-    where: { userId }, 
+    where: { userId }, // ✅ TypeScript now knows this is a string
     orderBy: { createdAt: "desc" },
   });
 
@@ -35,7 +34,7 @@ const AddSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const userId = await getAuthenticatedUserId();
+  const userId = await getAuthId();
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,12 +44,12 @@ export async function POST(req: Request) {
   const parsed = AddSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid ingredient", details: parsed.error.format() }, { status: 400 });
+    return NextResponse.json({ error: "Invalid ingredient" }, { status: 400 });
   }
 
   const ingredient = await prisma.ingredient.create({
     data: {
-      userId,
+      userId, 
       name: parsed.data.name,
       type: parsed.data.type,
     },
@@ -64,7 +63,7 @@ const DeleteSchema = z.object({
 });
 
 export async function DELETE(req: Request) {
-  const userId = await getAuthenticatedUserId();
+  const userId = await getAuthId();
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -77,13 +76,13 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  // Use deleteMany to ensure the user can only delete their own items
-  const result = await prisma.ingredient.deleteMany({
+  // Use deleteMany to ensure the item actually belongs to the user
+  await prisma.ingredient.deleteMany({
     where: { 
       id: parsed.data.id, 
       userId 
     },
   });
 
-  return NextResponse.json({ ok: true, deletedCount: result.count });
+  return NextResponse.json({ ok: true });
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
-import { assertEnv } from "@/lib/utils";
+import { assertEnv } from "@/lib/env.server";
 
 /**
  * POST /api/billing/webhook

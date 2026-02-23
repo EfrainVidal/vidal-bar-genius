@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAccess } from "@/lib/access.server";
 import { getStripe } from "@/lib/stripe";
-import { assertEnv } from "@/lib/utils";
+import { assertEnv } from "@/lib/env.server";
 
 /**
  * POST /api/billing/checkout

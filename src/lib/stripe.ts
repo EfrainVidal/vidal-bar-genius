@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { assertEnv } from "@/lib/utils";
+import { assertEnv } from "@/lib/env.server";
 
 /**
  * Stripe SDK instance.

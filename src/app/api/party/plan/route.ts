@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getUserIdOrNull } from "@/lib/access"; // if you removed this, use cookies() here instead
+import { getUserIdOrNull } from "@/lib/access.server";
 import { DRINKS } from "@/lib/drinks";
 
 /**

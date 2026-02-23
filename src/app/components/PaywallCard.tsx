@@ -49,11 +49,10 @@ export default function PaywallCard({
       }
 
       if (!res.ok) {
-        // Prefer server error message if provided
-        const msg =
-          data?.error ||
-          `Checkout failed (${res.status}). Check Vercel env vars: STRIPE_SECRET_KEY, STRIPE_PRICE_ID_PRO, APP_URL.`;
-        throw new Error(msg);
+          const msg = data?.detail
+            ? `${data?.error || "Checkout failed"}: ${data.detail}`
+            : (data?.error || `Checkout failed (${res.status})`);
+          throw new Error(msg);
       }
 
       if (!data?.url || typeof data.url !== "string") {

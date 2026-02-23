@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PaywallCard from "@/app/components/PaywallCard";
-import { safeJsonParse } from "@/lib/env.server";
+import { safeJsonParse } from "@/lib/utils";
 
 /**
  * Saved recipes:

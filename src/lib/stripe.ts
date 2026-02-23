@@ -1,14 +1,24 @@
+// src/lib/stripe.ts
+import "server-only";
+
 import Stripe from "stripe";
 import { assertEnv } from "@/lib/env.server";
 
 /**
- * Stripe SDK instance.
- * Keep apiVersion pinned for predictable behavior.
+ * Server-only Stripe helper.
+ * Only import this from:
+ * - Route Handlers (src/app/api/**)
+ * - Server Components
+ *
+ * Never import from Client Components ("use client").
  */
-export function getStripe() {
-  const key = assertEnv("STRIPE_SECRET_KEY");
 
-  return new Stripe(key, {
-    apiVersion: "2024-06-20"
-  });
+let stripeSingleton: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!stripeSingleton) {
+    stripeSingleton = new Stripe(assertEnv("STRIPE_SECRET_KEY"), {
+    });
+  }
+  return stripeSingleton;
 }

@@ -1,37 +1,28 @@
-// src/app/api/bar/route.ts
-
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAccess } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Helper: get a non-null userId or return a 401 response.
- * Prisma expects `string | undefined` (not null), so we normalize here.
+ * Helper: Fetches the userId. 
+ * Returns the string if found, or null if unauthorized.
  */
-async function getUserIdOr401() {
+async function getAuthenticatedUserId(): Promise<string | null> {
   const access = await getAccess();
-  const userId = access?.userId ?? undefined; // ✅ null -> undefined
-
-  if (!userId) {
-    return { userId: undefined, unauthorized: true as const };
-  }
-
-  return { userId, unauthorized: false as const };
+  // Ensure we return a real string or a clear null
+  return access?.userId || null;
 }
 
-/**
- * GET /api/bar
- * Returns ingredients in the user's bar.
- */
 export async function GET() {
-  const { userId, unauthorized } = await getUserIdOr401();
-  if (unauthorized || !userId) {
+  const userId = await getAuthenticatedUserId();
+
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const ingredients = await prisma.ingredient.findMany({
-    where: { userId }, // ✅ string (never null)
+    // TypeScript now knows userId is strictly a string here
+    where: { userId }, 
     orderBy: { createdAt: "desc" },
   });
 
@@ -43,26 +34,23 @@ const AddSchema = z.object({
   type: z.string().min(2).max(40),
 });
 
-/**
- * POST /api/bar
- * Adds an ingredient.
- */
 export async function POST(req: Request) {
-  const { userId, unauthorized } = await getUserIdOr401();
-  if (unauthorized || !userId) {
+  const userId = await getAuthenticatedUserId();
+
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => null);
-
+  const body = await req.json().catch(() => ({}));
   const parsed = AddSchema.safeParse(body);
+
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid ingredient" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid ingredient", details: parsed.error.format() }, { status: 400 });
   }
 
   const ingredient = await prisma.ingredient.create({
     data: {
-      userId, // ✅ string (never null)
+      userId,
       name: parsed.data.name,
       type: parsed.data.type,
     },
@@ -75,26 +63,27 @@ const DeleteSchema = z.object({
   id: z.string().min(1),
 });
 
-/**
- * DELETE /api/bar
- * Deletes an ingredient by id (must belong to user).
- */
 export async function DELETE(req: Request) {
-  const { userId, unauthorized } = await getUserIdOr401();
-  if (unauthorized || !userId) {
+  const userId = await getAuthenticatedUserId();
+
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => null);
-
+  const body = await req.json().catch(() => ({}));
   const parsed = DeleteSchema.safeParse(body);
+
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  await prisma.ingredient.deleteMany({
-    where: { id: parsed.data.id, userId }, // ✅ string (never null)
+  // Use deleteMany to ensure the user can only delete their own items
+  const result = await prisma.ingredient.deleteMany({
+    where: { 
+      id: parsed.data.id, 
+      userId 
+    },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, deletedCount: result.count });
 }

@@ -10,32 +10,50 @@ import { STARTER_BAR_PACK } from "@/lib/smartBar";
  * Adds a starter bar pack (idempotent-ish).
  * This massively improves activation -> more conversion.
  *
- * IMPORTANT:
- * - Always returns JSON
- * - Never calls Prisma without a real userId
+ * GUEST MODE:
+ * - Logged-in users store rows under userId
+ * - Logged-out users store rows under guestId (cookie)
+ *
+ * Goals:
+ * 1) Always return JSON (no HTML/empty bodies)
+ * 2) Never call Prisma without an owner (userId OR guestId)
+ * 3) Idempotent-ish: only inserts what the owner doesn't already have
  */
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
 }
 
-/** Non-throwing auth helper (prevents weird non-JSON/HTML responses on auth failures) */
-async function getAuthId(): Promise<string | null> {
+/** Owner resolver: uses userId if logged in, otherwise guestId */
+type Owner =
+  | { kind: "user"; userId: string }
+  | { kind: "guest"; guestId: string };
+
+async function getOwner(): Promise<Owner> {
   try {
     const access = await getAccess();
-    const userId = access?.userId;
-    if (typeof userId === "string" && userId.trim().length > 0) return userId;
-    return null;
+
+    // Logged in
+    if (typeof access.userId === "string" && access.userId.trim().length > 0) {
+      return { kind: "user", userId: access.userId };
+    }
+
+    // Guest mode (getAccess() guarantees guestId exists)
+    if (typeof access.guestId === "string" && access.guestId.trim().length > 0) {
+      return { kind: "guest", guestId: access.guestId };
+    }
+
+    throw new Error("Missing owner (no userId and no guestId)");
   } catch (err) {
-    console.error("getAccess() failed in /api/bar/starter:", err);
-    return null;
+    console.error("getOwner() failed in /api/bar/starter:", err);
+    throw err;
   }
 }
 
 /**
  * OPTIONAL DEBUG:
  * Visit /api/bar/starter in the browser to confirm route is live.
- * Remove later if you want.
+ * Safe to remove later.
  */
 export async function GET() {
   return NextResponse.json({ ok: true, route: "/api/bar/starter is live" });
@@ -43,35 +61,55 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const userId = await getAuthId();
-    if (!userId) return jsonError("Unauthorized", 401);
+    const owner = await getOwner();
 
-    // Load existing ingredient names for this user
+    // ✅ Build a prisma "where" filter based on owner type
+    const whereOwner =
+      owner.kind === "user" ? { userId: owner.userId } : { guestId: owner.guestId };
+
+    // Load existing ingredient names for this owner
     const existing = await prisma.ingredient.findMany({
-      where: { userId },
+      where: whereOwner,
       select: { name: true },
     });
 
-    // Compute what we already have (case-insensitive)
+    // Case-insensitive compare
     const have = new Set(existing.map((i) => i.name.toLowerCase()));
 
     // Only add what's missing (idempotent-ish)
     const toAdd = STARTER_BAR_PACK.filter((x) => !have.has(x.name.toLowerCase()));
 
     if (toAdd.length === 0) {
-      return NextResponse.json({ ok: true, added: 0 });
+      return NextResponse.json({ ok: true, added: 0, owner: owner.kind });
     }
 
-    // Bulk insert the missing starter pack items
+    // Bulk insert starter pack items for this owner
     await prisma.ingredient.createMany({
-      data: toAdd.map((x) => ({ userId, name: x.name, type: x.type })),
-      // skipDuplicates is optional; only works if you have a unique constraint
+      data: toAdd.map((x) => ({
+        name: x.name,
+        type: x.type,
+
+        // ✅ attach ownership
+        ...(owner.kind === "user" ? { userId: owner.userId } : { guestId: owner.guestId }),
+      })),
+
+      /**
+       * If you added @@unique([userId, name, type]) / @@unique([guestId, name, type]),
+       * you can enable skipDuplicates for extra safety.
+       */
       // skipDuplicates: true,
     });
 
-    return NextResponse.json({ ok: true, added: toAdd.length });
-  } catch (err) {
+    return NextResponse.json({ ok: true, added: toAdd.length, owner: owner.kind });
+  } catch (err: any) {
     console.error("POST /api/bar/starter error:", err);
-    return jsonError("Server error", 500);
+
+    // If unique constraints trigger duplicates, handle gracefully
+    const msg =
+      typeof err?.code === "string" && err.code === "P2002"
+        ? "Starter pack already added."
+        : "Server error";
+
+    return jsonError(msg, 500);
   }
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getAccess } from "@/lib/access.server";
 import PaywallCard from "@/app/components/PaywallCard";
 import LoginBox from "@/app/components/ui/LoginBox";
+import ClaimGuestOnLogin from "@/app/components/ClaimGuestOnLogin";
 
 /**
  * /pricing — built to convert:
@@ -42,6 +43,8 @@ export default async function PricingPage({
 
   return (
     <main className="container">
+      {/* ✅ If user just logged in, migrate guest bar → user account */}
+      <ClaimGuestOnLogin active={loggedIn} />
       <header style={{ marginBottom: 14 }}>
         <h1 className="pageTitle">Pricing 💳</h1>
         <p className="subtle" style={{ marginTop: 6 }}>

@@ -16,21 +16,20 @@ model User {
   createdAt  DateTime @default(now())
   lastSeenAt DateTime?
 
-  // Email-based identity (used as login + userId)
   email      String?  @unique
 
   isPro      Boolean  @default(false)
   proSince   DateTime?
 
-  // Stripe linkage (prevents double pay + helps support)
   stripeCustomerId      String? @unique
   stripePaymentIntentId String? @unique
 
-  ingredients Ingredient[]
-  recipes     SavedRecipe[]
-  usage       UsageEvent[]
-  partyPlans  PartyPlan[]
-  analytics   AnalyticsEvent[]
+  ingredients    Ingredient[]
+  recipes        SavedRecipe[]
+  usage          UsageEvent[]
+  partyPlans     PartyPlan[]
+  analytics      AnalyticsEvent[]
+  supportTickets SupportTicket[]
 
   @@index([isPro])
 }
@@ -63,13 +62,22 @@ model Ingredient {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Ownership: Logged-in users store rows under userId Anonymous users store rows under guestId (cookie-based) Exactly one of these should be set for a row.
+  userId  String?
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name      String
-  type      String
+  guestId String?
 
+  name    String
+  type    String
+
+  // Lookup speed
   @@index([userId])
+  @@index([guestId])
+
+  // Optional dedupe: Prevent duplicates per owner. Note: Postgres allows multiple NULLs, so these won't block "ownerless" rows, but your code never creates ownerless rows anyway.
+  @@unique([userId, name, type])
+  @@unique([guestId, name, type])
 }
 
 model SavedRecipe {
@@ -143,4 +151,38 @@ model StripeEvent {
   @@index([receivedAt])
   @@index([processedAt])
   @@index([type])
+}
+
+// =========================
+// Email Server
+// =========================
+
+enum SupportTicketStatus {
+  OPEN
+  CLOSED
+}
+
+model SupportTicket {
+  id           String              @id @default(cuid())
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  status       SupportTicketStatus @default(OPEN)
+
+  // If the user is logged in, we link it. Guest submissions keep this null.
+  userId       String?
+  user         User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Form fields
+  name         String
+  email        String
+  message      String
+
+  // Email delivery tracking (free + useful for debugging)
+  emailSentAt  DateTime?
+  emailError   String?
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([userId])
+  @@index([email])
 }

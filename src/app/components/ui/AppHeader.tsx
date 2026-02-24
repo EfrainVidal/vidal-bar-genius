@@ -102,6 +102,9 @@ export default function AppHeader() {
             <Link className="v-btn v-btnSmall" href="/pricing">
               Pricing
             </Link>
+            <Link href="/help" className="v-btn">
+              Help
+            </Link>
 
             {me.userId ? (
               <button className="v-btn v-btnSmall" onClick={doLogout} disabled={loading}>

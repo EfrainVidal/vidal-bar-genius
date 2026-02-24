@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 
 /**
- * Props definition (IMPORTANT)
- * This fixes your TypeScript error about userId not existing
+ * BarClient Props
+ * - userId is optional: if null => guest mode
+ * - isPro is only true when logged in AND user is pro
  */
 type BarClientProps = {
   isPro: boolean;
@@ -14,21 +15,26 @@ type BarClientProps = {
 /**
  * Safe response reader:
  * Prevents crashes like "Unexpected end of JSON input"
+ * by reading text first and only parsing JSON when appropriate.
  */
 async function readJsonOrText(res: Response) {
   const contentType = res.headers.get("content-type") || "";
   const text = await res.text();
 
+  // Empty body: treat as null JSON
   if (!text) return { json: null as any, text: "" };
 
+  // JSON response: parse
   if (contentType.includes("application/json")) {
     try {
       return { json: JSON.parse(text), text };
     } catch {
+      // JSON header but invalid JSON body
       return { json: null as any, text };
     }
   }
 
+  // Non-JSON (HTML error page, etc.)
   return { json: null as any, text };
 }
 
@@ -41,7 +47,10 @@ async function assertOk(res: Response) {
   const { json, text } = await readJsonOrText(res);
 
   const msg =
-    (json && typeof json === "object" && (json.error || json.message) && String(json.error || json.message)) ||
+    (json &&
+      typeof json === "object" &&
+      (json.error || json.message) &&
+      String(json.error || json.message)) ||
     (text ? text.slice(0, 200) : "") ||
     `Request failed (${res.status})`;
 
@@ -59,6 +68,9 @@ export default function BarClient({ isPro, userId }: BarClientProps) {
 
   /**
    * Load ingredients
+   * Guest Mode:
+   * - If logged out: server uses guestId cookie and returns guest ingredients
+   * - If logged in: server uses userId and returns user ingredients
    */
   async function load() {
     const res = await fetch("/api/bar");
@@ -70,17 +82,12 @@ export default function BarClient({ isPro, userId }: BarClientProps) {
 
   /**
    * Add ingredient
+   * Guest Mode:
+   * - Works without login (saved to guestId cookie owner)
    */
   async function add() {
     try {
       setLoading(true);
-
-      // ❌ Prevent adding if not logged in
-      if (!userId) {
-        alert("Please log in first.");
-        window.location.href = "/pricing#login";
-        return;
-      }
 
       const res = await fetch("/api/bar", {
         method: "POST",
@@ -101,17 +108,12 @@ export default function BarClient({ isPro, userId }: BarClientProps) {
 
   /**
    * Add starter pack
+   * Guest Mode:
+   * - Works without login (saved to guestId cookie owner)
    */
   async function addStarterPack() {
     try {
       setLoading(true);
-
-      // ❌ Prevent unauthorized call (fixes your current error)
-      if (!userId) {
-        alert("Please log in first.");
-        window.location.href = "/pricing#login";
-        return;
-      }
 
       const res = await fetch("/api/bar/starter", { method: "POST" });
       await assertOk(res);
@@ -130,6 +132,8 @@ export default function BarClient({ isPro, userId }: BarClientProps) {
 
   /**
    * Remove ingredient
+   * Guest Mode:
+   * - Deletes only if the ingredient belongs to the current owner (userId or guestId)
    */
   async function remove(id: string) {
     const ok = confirm("Delete this ingredient?");
@@ -156,12 +160,26 @@ export default function BarClient({ isPro, userId }: BarClientProps) {
     load().catch(() => {});
   }, []);
 
+  const isGuest = !userId;
+
   return (
     <>
       <h1 className="pageTitle">My Bar 🧊</h1>
-      <p className="subtle">
-        Add what you have. Better bar = better matches = more “holy sh*t” moments.
-      </p>
+
+      {/* ✅ Guest/Logged-in status messaging (conversion + clarity) */}
+      {isGuest ? (
+        <p className="subtle">
+          You’re in <b>Guest Mode</b> — your bar is saved on this device.{" "}
+          <a href="/pricing#login" style={{ fontWeight: 800 }}>
+            Log in
+          </a>{" "}
+          to sync across devices.
+        </p>
+      ) : (
+        <p className="subtle">
+          Logged in — your bar is synced across devices.
+        </p>
+      )}
 
       <div className="hr" />
 
@@ -190,7 +208,7 @@ export default function BarClient({ isPro, userId }: BarClientProps) {
           <button
             className="v-btn v-btnPrimary"
             onClick={add}
-            disabled={loading || name.trim().length < 2 || !userId}
+            disabled={loading || name.trim().length < 2}
           >
             {loading ? "Adding…" : "Add"}
           </button>
@@ -201,23 +219,21 @@ export default function BarClient({ isPro, userId }: BarClientProps) {
         </div>
 
         <div className="row">
-          <button
-            className="v-btn"
-            onClick={addStarterPack}
-            disabled={loading || !userId} // ✅ disable if not logged in
-            title={!userId ? "Login required" : undefined}
-          >
+          <button className="v-btn" onClick={addStarterPack} disabled={loading}>
             ⚡ Add Starter Bar Pack
           </button>
 
-          {!userId ? (
-            <span className="mini">Login required to save your bar.</span>
-          ) : (
-            <span className="mini">
-              Best for new users: instant matches → instant retention.
-            </span>
-          )}
+          <span className="mini">
+            Best for new users: instant matches → instant retention.
+          </span>
         </div>
+
+        {/* ✅ Small conversion nudge: guest users should log in eventually */}
+        {isGuest ? (
+          <div style={{ marginTop: 10 }} className="mini">
+            Tip: log in later to keep your bar if you switch phones/laptops.
+          </div>
+        ) : null}
       </div>
 
       <div className="hr" />

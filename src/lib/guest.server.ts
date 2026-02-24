@@ -1,60 +1,30 @@
 // src/lib/guest.server.ts
-
 import { cookies } from "next/headers";
-import { randomUUID } from "crypto";
+
+export const COOKIE_NAME = "vbg_guest";
 
 /**
- * Guest session cookie
- * - Lets anonymous users save data without login
- * - Works across pages on the same device/browser
- *
- * ✅ Next.js 15: cookies() is ASYNC → must await it
- */
-
-const COOKIE_NAME = "vbg_guest";
-
-/**
- * Returns the guestId if present, otherwise creates one and sets cookie.
- */
-export async function getOrCreateGuestId(): Promise<string> {
-  const jar = await cookies(); // ✅ FIX: await cookies()
-
-  const existing = jar.get(COOKIE_NAME)?.value;
-  if (existing && existing.length > 10) return existing;
-
-  const guestId = randomUUID();
-
-  jar.set(COOKIE_NAME, guestId, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: true,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365, // 1 year
-  });
-
-  return guestId;
-}
-
-/**
- * Read guestId if it exists (does NOT create)
+ * READ ONLY
+ * Middleware creates the guest cookie.
+ * This function must never set cookies.
  */
 export async function getGuestId(): Promise<string | null> {
-  const jar = await cookies(); // ✅ FIX
-
+  const jar = await cookies();
   const v = jar.get(COOKIE_NAME)?.value;
-  if (v && v.length > 10) return v;
-
-  return null;
+  return v && v.length > 10 ? v : null;
 }
 
 /**
- * Clear guest cookie
+ * Backwards compatible. Still READ ONLY.
  */
-export async function clearGuestId() {
-  const jar = await cookies(); // ✅ FIX
+export async function getOrCreateGuestId(): Promise<string | null> {
+  return await getGuestId();
+}
 
-  jar.set(COOKIE_NAME, "", {
-    path: "/",
-    maxAge: 0,
-  });
+/**
+ * CLEAR ONLY (Route Handler / Server Action ONLY)
+ */
+export async function clearGuestId(): Promise<void> {
+  const jar = await cookies();
+  jar.set(COOKIE_NAME, "", { path: "/", maxAge: 0 });
 }

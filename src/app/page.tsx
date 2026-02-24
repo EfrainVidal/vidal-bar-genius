@@ -3,13 +3,7 @@ import { getAccess } from "@/lib/access.server";
 import PaywallCard from "@/app/components/PaywallCard";
 import Row from "@/app/components/ui/Row";
 
-/**
- * Homepage = marketing + conversion.
- * Goal:
- * - Primary CTA: Make Drinks (instant value)
- * - Secondary CTA: Build Bar
- * - Party Mode CTA routes smartly (PRO -> /party, Free -> /pricing)
- */
+// ✅ Server Component (default in app router). Do NOT add "use client" here.
 export default async function HomePage() {
   const { userId, isPro } = await getAccess();
 
@@ -31,7 +25,6 @@ export default async function HomePage() {
               Build My Bar
             </Link>
 
-            {/* Party Mode should push free users toward pricing */}
             <Link className="v-btn" href={isPro ? "/party" : "/pricing"}>
               Party Mode
             </Link>
@@ -99,9 +92,7 @@ export default async function HomePage() {
           <h2 className="pageTitle" style={{ marginBottom: 6 }}>
             You’re PRO. Let’s host. 😈
           </h2>
-          <p className="subtle">
-            Head to Party Mode and build a full menu in minutes.
-          </p>
+          <p className="subtle">Head to Party Mode and build a full menu in minutes.</p>
           <div style={{ marginTop: 10 }}>
             <Link className="v-btn v-btnPrimary" href="/party">
               Open Party Mode

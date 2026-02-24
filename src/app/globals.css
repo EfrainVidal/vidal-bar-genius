@@ -234,6 +234,39 @@ a:hover { text-decoration: none; }
   transition: border 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
 
+/* =========================================================
+   FIX: Native <select> dropdown invisible on dark theme
+   ---------------------------------------------------------
+   Issue:
+   On Windows + Chrome (and some Edge setups),
+   the dropdown list renders white with light text,
+   making options appear invisible unless highlighted.
+
+   Solution:
+   1. Force dark color scheme for the control
+   2. Explicitly style <option> + <optgroup>
+   3. Match Vidal Bar Genius premium theme
+   ========================================================= */
+
+/* Tell browser this is a dark UI control */
+.select {
+  color-scheme: dark; /* Critical for proper dark dropdown rendering */
+}
+
+/* Dropdown menu options */
+.select option,
+.select optgroup {
+  background-color: var(--bg1); /* Matte charcoal */
+  color: var(--text);           /* High contrast white text */
+}
+
+/* Highlighted / selected option */
+.select option:checked,
+.select option:hover {
+  background-color: rgba(214,167,90,0.22); /* Whiskey gold accent */
+  color: var(--text);
+}
+
 .input:focus, .select:focus, .textarea:focus, .v-input:focus {
   border-color: rgba(214,167,90,0.45);
   background: rgba(255,255,255,0.07);

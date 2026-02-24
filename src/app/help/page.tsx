@@ -109,7 +109,7 @@ export default async function HelpPage() {
         <p className="subtle" style={{ marginTop: 0 }}>
           Prefer email? Reach us at{" "}
           <a href="mailto:vidalbargenius@gmail.com" className="v-btn" style={{ padding: "2px 10px" }}>
-            support@vidalbargenius.com
+            support - vidalbargenius@gmail.com
           </a>{" "}
           (replace this anytime).
         </p>

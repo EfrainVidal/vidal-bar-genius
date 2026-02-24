@@ -12,6 +12,10 @@ import { getUserIdOrAnon } from "@/lib/identity.server";
  * - Creates SupportTicket in Postgres (so nothing is lost)
  * - Attempts to send support email via Gmail SMTP (Nodemailer)
  * - Always returns JSON
+ *
+ * IMPORTANT:
+ * - Do NOT call cookies()/headers() (directly or indirectly) at module scope.
+ * - Anything that relies on request scope must happen INSIDE the route handler.
  */
 
 const ContactSchema = z.object({
@@ -23,9 +27,6 @@ const ContactSchema = z.object({
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
 }
-
-// You already use this pattern elsewhere (shown in your /api/make code).
-const { userId } = await getUserIdOrAnon(getSessionUserId);
 
 export async function POST(req: Request) {
   try {
@@ -44,10 +45,21 @@ export async function POST(req: Request) {
 
     const { name, email, message } = parsed.data;
 
-    // 1) Always store the ticket first (free + reliable).
+    // ✅ Request-scoped identity lookup MUST be inside the handler.
+    // These helpers likely use cookies() internally, which only works during a request.
+    let userId: string | null = null;
+    try {
+      const identity = await getUserIdOrAnon(getSessionUserId);
+      userId = typeof identity?.userId === "string" ? identity.userId : null;
+    } catch {
+      // If identity resolution fails for any reason, we still accept support messages.
+      userId = null;
+    }
+
+    // 1) Store ticket first
     const ticket = await prisma.supportTicket.create({
       data: {
-        userId: typeof userId === "string" ? userId : null,
+        userId,
         name,
         email,
         message,
@@ -58,8 +70,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2) Attempt to send email. If it fails, we keep the ticket and report success anyway.
-    // This keeps UX smooth and avoids users retry-spamming if Gmail throttles temporarily.
+    // 2) Attempt SMTP send (non-blocking UX: we still accept the ticket even if SMTP fails)
     let emailSent = false;
     let emailError: string | null = null;
 
@@ -80,12 +91,12 @@ export async function POST(req: Request) {
       emailError = err instanceof Error ? err.message : "Unknown email error";
     }
 
-    // 3) Persist send result (helps you debug deliverability + auth mistakes).
+    // 3) Persist send result
     await prisma.supportTicket.update({
       where: { id: ticket.id },
       data: {
         emailSentAt: emailSent ? new Date() : null,
-        emailError: emailError,
+        emailError,
       },
       select: { id: true },
     });
